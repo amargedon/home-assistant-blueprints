@@ -1,51 +1,75 @@
 blueprint:
-  name: Smoke Detector Global Alert
+  name: Fire / Smoke Detector Emergency Alert
   description: >
-    Automatically monitors all smoke detectors (binary_sensor with device_class smoke).
-    Sends a notification when any detector reports smoke.
+    Sends emergency notifications when a smoke detector detects smoke.
+    Optional: turn on lights for visibility during evacuation.
   domain: automation
   input:
-    notify_service:
-      name: Notification service
-      description: Notify service to send the alert (example: notify.mobile_app_phone)
+    smoke_detectors:
+      name: Smoke detectors
+      description: Select one or more smoke detectors
       selector:
-        text:
+        entity:
+          domain: binary_sensor
+          device_class: smoke
+          multiple: true
+
+    notify_devices:
+      name: Notification services
+      description: Select one or more notify services
+      selector:
+        entity:
+          domain: notify
+          multiple: true
+
+    emergency_lights:
+      name: Lights to turn on (optional)
+      description: Lights to turn on when smoke is detected
+      default: []
+      selector:
+        target:
+          entity:
+            domain: light
 
     notification_title:
       name: Notification title
-      default: "🚨 Smoke detected!"
+      default: "🚨 SMOKE DETECTED"
       selector:
         text:
 
     notification_message:
       name: Notification message
-      default: "Smoke detected by {{ trigger.to_state.name }}!"
+      default: >
+        Smoke detected by {{ trigger.to_state.name }}
+        in {{ area_name(trigger.entity_id) or "unknown area" }}!
       selector:
         text:
 
 mode: parallel
-max: 10
+max: 20
 
 trigger:
-  - platform: template
-    value_template: >
-      {{ expand(states.binary_sensor)
-         | selectattr('attributes.device_class','eq','smoke')
-         | selectattr('state','eq','on')
-         | list | count > 0 }}
+  - platform: state
+    entity_id: !input smoke_detectors
+    to: "on"
 
 action:
   - variables:
-      active_detector: >
-        {{ expand(states.binary_sensor)
-           | selectattr('attributes.device_class','eq','smoke')
-           | selectattr('state','eq','on')
-           | map(attribute='name')
-           | list
-           | join(', ') }}
+      area: "{{ area_name(trigger.entity_id) }}"
 
-  - service: !input notify_service
-    data:
-      title: !input notification_title
-      message: >
-        {{ active_detector }} detected smoke!
+  - repeat:
+      for_each: !input notify_devices
+      sequence:
+        - service: "{{ repeat.item }}"
+          data:
+            title: !input notification_title
+            message: !input notification_message
+
+  - choose:
+      - conditions: "{{ !input emergency_lights != [] }}"
+        sequence:
+          - service: light.turn_on
+            target: !input emergency_lights
+            data:
+              brightness_pct: 100
+              color_name: red
