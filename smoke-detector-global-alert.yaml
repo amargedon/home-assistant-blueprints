@@ -1,0 +1,51 @@
+blueprint:
+  name: Smoke Detector Global Alert
+  description: >
+    Automatically monitors all smoke detectors (binary_sensor with device_class smoke).
+    Sends a notification when any detector reports smoke.
+  domain: automation
+  input:
+    notify_service:
+      name: Notification service
+      description: Notify service to send the alert (example: notify.mobile_app_phone)
+      selector:
+        text:
+
+    notification_title:
+      name: Notification title
+      default: "🚨 Smoke detected!"
+      selector:
+        text:
+
+    notification_message:
+      name: Notification message
+      default: "Smoke detected by {{ trigger.to_state.name }}!"
+      selector:
+        text:
+
+mode: parallel
+max: 10
+
+trigger:
+  - platform: template
+    value_template: >
+      {{ expand(states.binary_sensor)
+         | selectattr('attributes.device_class','eq','smoke')
+         | selectattr('state','eq','on')
+         | list | count > 0 }}
+
+action:
+  - variables:
+      active_detector: >
+        {{ expand(states.binary_sensor)
+           | selectattr('attributes.device_class','eq','smoke')
+           | selectattr('state','eq','on')
+           | map(attribute='name')
+           | list
+           | join(', ') }}
+
+  - service: !input notify_service
+    data:
+      title: !input notification_title
+      message: >
+        {{ active_detector }} detected smoke!
