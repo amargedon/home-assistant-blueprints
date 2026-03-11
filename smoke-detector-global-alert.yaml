@@ -56,7 +56,9 @@ variables:
 
 action:
   - choose:
-      - conditions: "{{ !input emergency_lights != {} }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ lights != {} }}"
         sequence:
           - service: light.turn_on
             target: !input emergency_lights
