@@ -1,0 +1,89 @@
+blueprint:
+  name: Critical Environmental Alert (Smoke or Water Leak)
+  description: >
+    Sends critical notifications to a notify group when selected smoke detectors or water leak sensors detect an alert.
+    Includes sensor name and area. Repeats sound until the alarm clears. Optional emergency lights with type-specific colors.
+
+  domain: automation
+
+  input:
+    sensors:
+      name: Environmental sensors
+      description: Select one or more smoke detectors or water leak sensors
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - smoke
+            - moisture
+          multiple: true
+
+    emergency_lights:
+      name: Emergency lights (optional)
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+
+    repeat_interval:
+      name: Notification repeat interval
+      description: How often to resend alerts while the sensor is active (seconds)
+      default: 60
+      selector:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: seconds
+          mode: slider
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input sensors
+    to: "on"
+
+variables:
+  detector: "{{ trigger.to_state.name }}"
+  area: "{{ area_name(trigger.entity_id) or 'unknown area' }}"
+  device_class: "{{ trigger.to_state.attributes.device_class }}"
+  lights: !input emergency_lights
+  alert_type: >
+    {% if device_class == 'smoke' %}SMOKE{% elif device_class == 'moisture' %}WATER LEAK{% else %}ALERT{% endif %}
+  light_color: >
+    {% if device_class == 'smoke' %}red{% elif device_class == 'moisture' %}blue{% else %}yellow{% endif %}
+
+action:
+
+  # Turn on emergency lights if configured
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ lights != {} }}"
+        sequence:
+          - service: light.turn_on
+            target: !input emergency_lights
+            data:
+              brightness_pct: 100
+              color_name: "{{ light_color }}"
+
+  # Repeat notifications while sensor is active
+  - repeat:
+      while:
+        - condition: template
+          value_template: "{{ is_state(trigger.entity_id, 'on') }}"
+      sequence:
+        - service: notify.all_phones
+          data:
+            title: "🚨 {{ alert_type }} DETECTED"
+            message: >
+              {{ alert_type }} detected by {{ detector }} in {{ area }}!
+            data:
+              push:
+                sound:
+                  name: default
+                  critical: 1
+                  volume: 1.0
+        - delay:
+            seconds: !input repeat_interval
