@@ -74,12 +74,10 @@ action:
         - repeat:
             for_each: !input mobile_devices
             sequence:
-              - device_id: "{{ repeat.item }}"
-                domain: mobile_app
-                type: notify
+            - service: "{{ repeat.item }}"
+              data:
                 title: "🚨 SMOKE DETECTED"
-                message: >
-                  Smoke detected by {{ detector }} in {{ area }}.
+                message: "Smoke detected!"
                 data:
                   push:
                     sound:
