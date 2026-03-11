@@ -1,8 +1,8 @@
 blueprint:
-  name: Critical Smoke Detector Alert (With Area & Repeating Sound)
+  name: Critical Smoke Detector Alert (Manual Selection + Companion App)
   description: >
     Sends critical notifications to Home Assistant Companion App devices
-    when a smoke detector detects smoke. Includes sensor name and room.
+    when a selected smoke detector detects smoke. Includes sensor name and area.
     Repeats sound until the alarm clears. Optional emergency lights.
 
   domain: automation
@@ -17,12 +17,12 @@ blueprint:
           device_class: smoke
           multiple: true
 
-    mobile_devices:
-      name: Mobile devices
-      description: Phones running the Home Assistant Companion App
+    notify_services:
+      name: Phone notification services
+      description: Select the Companion App notify services (notify.mobile_app_*)
       selector:
-        device:
-          integration: mobile_app
+        entity:
+          domain: notify
           multiple: true
 
     emergency_lights:
@@ -70,7 +70,7 @@ action:
               brightness_pct: 100
               color_name: red
 
-  # Repeat notifications while smoke detector is on
+  # Repeat notifications while smoke detector is ON
   - repeat:
       while:
         - condition: template
@@ -79,21 +79,19 @@ action:
 
         # Send critical notifications to all selected phones
         - repeat:
-            for_each: !input mobile_devices
+            for_each: !input notify_services
             sequence:
-              - device_id: "{{ repeat.item }}"
-                domain: mobile_app
-                type: notify
-                title: "🚨 SMOKE DETECTED"
-                message: >
-                  Smoke detected by {{ detector }} in {{ area }}!
+              - service: "{{ repeat.item }}"
                 data:
-                  push:
-                    sound:
-                      name: default
-                      critical: 1
-                      volume: 1.0
+                  title: "🚨 SMOKE DETECTED"
+                  message: >
+                    Smoke detected by {{ detector }} in {{ area }}!
+                  data:
+                    push:
+                      sound:
+                        name: default
+                        critical: 1
+                        volume: 1.0
 
-        # Wait before repeating
         - delay:
             seconds: !input repeat_interval
