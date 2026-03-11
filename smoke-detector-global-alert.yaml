@@ -1,75 +1,91 @@
 blueprint:
-  name: Fire / Smoke Detector Emergency Alert
+  name: Critical Smoke Detector Alert
   description: >
-    Sends emergency notifications when a smoke detector detects smoke.
-    Optional: turn on lights for visibility during evacuation.
+    Sends critical notifications to Home Assistant Companion App devices
+    when a smoke detector detects smoke. Notifications repeat until the
+    alarm clears. Optionally turns on lights.
+
   domain: automation
+
   input:
     smoke_detectors:
       name: Smoke detectors
-      description: Select one or more smoke detectors
       selector:
         entity:
           domain: binary_sensor
           device_class: smoke
           multiple: true
 
-    notify_devices:
-      name: Notification services
-      description: Select one or more notify services
+    mobile_devices:
+      name: Mobile devices
+      description: Phones running the Home Assistant Companion App
       selector:
-        entity:
-          domain: notify
+        device:
+          integration: mobile_app
           multiple: true
 
     emergency_lights:
-      name: Lights to turn on (optional)
-      description: Lights to turn on when smoke is detected
-      default: []
+      name: Emergency lights (optional)
+      default: {}
       selector:
         target:
           entity:
             domain: light
 
-    notification_title:
-      name: Notification title
-      default: "🚨 SMOKE DETECTED"
+    repeat_interval:
+      name: Repeat notification interval
+      description: How often to resend alerts while smoke is active
+      default: 60
       selector:
-        text:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: seconds
+          mode: slider
 
-    notification_message:
-      name: Notification message
-      default: >
-        Smoke detected by {{ trigger.to_state.name }}
-        in {{ area_name(trigger.entity_id) or "unknown area" }}!
-      selector:
-        text:
-
-mode: parallel
-max: 20
+mode: restart
 
 trigger:
   - platform: state
     entity_id: !input smoke_detectors
     to: "on"
 
+variables:
+  area: "{{ area_name(trigger.entity_id) or 'unknown area' }}"
+  detector: "{{ trigger.to_state.name }}"
+
 action:
-  - variables:
-      area: "{{ area_name(trigger.entity_id) }}"
-
-  - repeat:
-      for_each: !input notify_devices
-      sequence:
-        - service: "{{ repeat.item }}"
-          data:
-            title: !input notification_title
-            message: !input notification_message
-
   - choose:
-      - conditions: "{{ !input emergency_lights != [] }}"
+      - conditions: "{{ !input emergency_lights != {} }}"
         sequence:
           - service: light.turn_on
             target: !input emergency_lights
             data:
               brightness_pct: 100
               color_name: red
+
+  - repeat:
+      while:
+        - condition: state
+          entity_id: "{{ trigger.entity_id }}"
+          state: "on"
+      sequence:
+
+        - repeat:
+            for_each: !input mobile_devices
+            sequence:
+              - device_id: "{{ repeat.item }}"
+                domain: mobile_app
+                type: notify
+                title: "🚨 SMOKE DETECTED"
+                message: >
+                  Smoke detected by {{ detector }} in {{ area }}.
+                data:
+                  push:
+                    sound:
+                      name: default
+                      critical: 1
+                      volume: 1.0
+
+        - delay:
+            seconds: !input repeat_interval
