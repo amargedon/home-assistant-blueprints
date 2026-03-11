@@ -1,15 +1,16 @@
 blueprint:
-  name: Critical Smoke Detector Alert
+  name: Critical Smoke Detector Alert (With Area & Repeating Sound)
   description: >
     Sends critical notifications to Home Assistant Companion App devices
-    when a smoke detector detects smoke. Notifications repeat until the
-    alarm clears. Optionally turns on lights.
+    when a smoke detector detects smoke. Includes sensor name and room.
+    Repeats sound until the alarm clears. Optional emergency lights.
 
   domain: automation
 
   input:
     smoke_detectors:
       name: Smoke detectors
+      description: Select one or more smoke detectors
       selector:
         entity:
           domain: binary_sensor
@@ -33,8 +34,8 @@ blueprint:
             domain: light
 
     repeat_interval:
-      name: Repeat notification interval
-      description: How often to resend alerts while smoke is active
+      name: Notification repeat interval
+      description: How often to resend alerts while smoke is active (seconds)
       default: 60
       selector:
         number:
@@ -51,10 +52,13 @@ trigger:
     to: "on"
 
 variables:
-  area: "{{ area_name(trigger.entity_id) or 'unknown area' }}"
   detector: "{{ trigger.to_state.name }}"
+  area: "{{ area_name(trigger.entity_id) or 'unknown area' }}"
+  lights: !input emergency_lights
 
 action:
+
+  # Turn on emergency lights if configured
   - choose:
       - conditions:
           - condition: template
@@ -66,20 +70,23 @@ action:
               brightness_pct: 100
               color_name: red
 
+  # Repeat notifications while smoke detector is on
   - repeat:
       while:
-        - condition: state
-          entity_id: "{{ trigger.entity_id }}"
-          state: "on"
+        - condition: template
+          value_template: "{{ is_state(trigger.entity_id, 'on') }}"
       sequence:
 
+        # Send critical notifications to all selected phones
         - repeat:
             for_each: !input mobile_devices
             sequence:
-            - service: "{{ repeat.item }}"
-              data:
+              - device_id: "{{ repeat.item }}"
+                domain: mobile_app
+                type: notify
                 title: "🚨 SMOKE DETECTED"
-                message: "Smoke detected!"
+                message: >
+                  Smoke detected by {{ detector }} in {{ area }}!
                 data:
                   push:
                     sound:
@@ -87,5 +94,6 @@ action:
                       critical: 1
                       volume: 1.0
 
+        # Wait before repeating
         - delay:
             seconds: !input repeat_interval
