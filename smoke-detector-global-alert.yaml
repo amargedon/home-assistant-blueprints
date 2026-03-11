@@ -17,14 +17,6 @@ blueprint:
           device_class: smoke
           multiple: true
 
-    notify_services:
-      name: Phone notification services
-      description: Select the Companion App notify services (notify.mobile_app_*)
-      selector:
-        entity:
-          domain: notify
-          multiple: true
-
     emergency_lights:
       name: Emergency lights (optional)
       default: {}
@@ -57,7 +49,6 @@ variables:
   lights: !input emergency_lights
 
 action:
-
   # Turn on emergency lights if configured
   - choose:
       - conditions:
@@ -71,27 +62,21 @@ action:
               color_name: red
 
   # Repeat notifications while smoke detector is ON
-  - repeat:
-      while:
-        - condition: template
-          value_template: "{{ is_state(trigger.entity_id, 'on') }}"
-      sequence:
-
-        # Send critical notifications to all selected phones
-        - repeat:
-            for_each: !input notify_services
-            sequence:
-              - service: "{{ repeat.item }}"
-                data:
-                  title: "🚨 SMOKE DETECTED"
-                  message: >
-                    Smoke detected by {{ detector }} in {{ area }}!
-                  data:
-                    push:
-                      sound:
-                        name: default
-                        critical: 1
-                        volume: 1.0
-
-        - delay:
-            seconds: !input repeat_interval
+- repeat:
+    while:
+      - condition: template
+        value_template: "{{ is_state(trigger.entity_id, 'on') }}"
+    sequence:
+      - service: notify.all-phones
+        data:
+          title: "🚨 SMOKE DETECTED"
+          message: >
+            Smoke detected by {{ detector }} in {{ area }}!
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1.0
+      - delay:
+          seconds: !input repeat_interval
