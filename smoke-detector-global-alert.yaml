@@ -1,9 +1,8 @@
 blueprint:
-  name: Critical Smoke Detector Alert (Manual Selection + Companion App)
+  name: Critical Smoke Detector Alert (Manual + Notify Group)
   description: >
-    Sends critical notifications to Home Assistant Companion App devices
-    when a selected smoke detector detects smoke. Includes sensor name and area.
-    Repeats sound until the alarm clears. Optional emergency lights.
+    Sends critical notifications to a notify group when a selected smoke detector detects smoke.
+    Includes sensor name and area. Repeats sound until the alarm clears. Optional emergency lights.
 
   domain: automation
 
@@ -49,6 +48,7 @@ variables:
   lights: !input emergency_lights
 
 action:
+
   # Turn on emergency lights if configured
   - choose:
       - conditions:
@@ -62,21 +62,21 @@ action:
               color_name: red
 
   # Repeat notifications while smoke detector is ON
-- repeat:
-    while:
-      - condition: template
-        value_template: "{{ is_state(trigger.entity_id, 'on') }}"
-    sequence:
-      - service: notify.all-phones
-        data:
-          title: "🚨 SMOKE DETECTED"
-          message: >
-            Smoke detected by {{ detector }} in {{ area }}!
+  - repeat:
+      while:
+        - condition: template
+          value_template: "{{ is_state(trigger.entity_id, 'on') }}"
+      sequence:
+        - service: notify.all_phones
           data:
-            push:
-              sound:
-                name: default
-                critical: 1
-                volume: 1.0
-      - delay:
-          seconds: !input repeat_interval
+            title: "🚨 SMOKE DETECTED"
+            message: >
+              Smoke detected by {{ detector }} in {{ area }}!
+            data:
+              push:
+                sound:
+                  name: default
+                  critical: 1
+                  volume: 1.0
+        - delay:
+            seconds: !input repeat_interval
